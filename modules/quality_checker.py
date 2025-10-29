@@ -21,28 +21,7 @@ def summarize_dataframe(df: pd.DataFrame, name: str):
 
 
 # ====================================================
-# 🔗 2. 컬럼 기반 관계 후보 탐색
-# ====================================================
-def find_relations(dfs: dict):
-    """컬럼명 패턴 기반으로 테이블 간 FK 후보 관계 탐색"""
-    relations = []
-    keys = list(dfs.keys())
-    for i, t1 in enumerate(keys):
-        for j, t2 in enumerate(keys[i + 1:], i + 1):
-            for c1 in dfs[t1].columns:
-                for c2 in dfs[t2].columns:
-                    if (
-                        c1.lower() == c2.lower()
-                        or (c1.lower().endswith("_id") and c2.lower().endswith("_id"))
-                    ):
-                        relations.append(
-                            {"table1": t1, "col1": c1, "table2": t2, "col2": c2}
-                        )
-    return relations
-
-
-# ====================================================
-# 🤖 3. Azure OpenAI 클라이언트 초기화
+# 🤖 2. Azure OpenAI 클라이언트 초기화
 # ====================================================
 def init_azure_client():
     """Azure OpenAI 클라이언트 초기화"""

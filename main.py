@@ -33,8 +33,8 @@ client = init_azure_client()
 
 # ===== 1️⃣ 파일 업로드 =====
 uploaded_files = st.file_uploader(
-    "📦 CSV / XLSX / TXT / ZIP 업로드",
-    type=["csv", "xlsx", "txt", "zip"],
+    "📦 CSV / XLSX / TXT / XML / JSON / ZIP 업로드",
+    type=["csv","xlsx","txt","xml", "json", "zip"],
     accept_multiple_files=True,
     key="file_uploader_main"
 )
@@ -53,17 +53,20 @@ if dfs:
     st.markdown("---")
     st.subheader("🧠 데이터 품질 점검 보고서")
 
-    # 리포트 생성
-    if st.session_state["preload_quality_report"] is None:
-        with st.spinner("AI가 데이터 품질 점검 중입니다..."):
-            ai_report = run_ai_report(client, table_summaries, relations)
-            st.session_state["preload_quality_report"] = ai_report
+    button_clicked = st.button("보고서 생성하기")
 
-    # 리포트 출력
-    if st.session_state["preload_quality_report"]:
-        st.markdown(st.session_state["preload_quality_report"])
-    else:
-        st.info("아직 품질 점검 리포트가 생성되지 않았습니다.")
+    if button_clicked:
+        # 리포트 생성
+        if st.session_state["preload_quality_report"] is None:
+            with st.spinner("AI가 데이터 품질 점검 중입니다..."):
+                ai_report = run_ai_report(client, table_summaries, relations)
+                st.session_state["preload_quality_report"] = ai_report
+
+        # 리포트 출력
+        if st.session_state["preload_quality_report"]:
+            st.markdown(st.session_state["preload_quality_report"])
+        else:
+            st.info("아직 품질 점검 리포트가 생성되지 않았습니다.")
 
     # Q&A 구간
     st.subheader("💬 리포트 기반 Q&A")
@@ -95,15 +98,79 @@ if dfs:
 
     fillna_opt = st.checkbox("결측치 0으로 채우기")
     dropdup_opt = st.checkbox("중복행 제거")
-    encode_opt = st.checkbox("문자형 인코딩 (Label Encoding)")
 
     if st.button("🚀 전처리 실행"):
+        # 전처리 옵션 정리
         opts = {
             "fillna_zero": fillna_opt,
             "drop_duplicates": dropdup_opt,
-            "encode_objects": encode_opt
         }
-        cleaned = preprocess_dataframe(df, opts)
-        st.session_state["cleaned_df"] = cleaned
+
+        # 원본 복사
+        original_df = df.copy()
+
+        # 전처리 수행
+        cleaned_df = preprocess_dataframe(df, opts)
+        st.session_state["cleaned_df"] = cleaned_df
+
+        # ===== 변화 요약 계산 =====
+        rows_before = len(original_df)
+        rows_after = len(cleaned_df)
+
+        nulls_before = int(original_df.isna().sum().sum())
+        nulls_after = int(cleaned_df.isna().sum().sum())
+
+        # dtype 변화 감지
+        dtypes_before = original_df.dtypes.astype(str).to_dict()
+        dtypes_after = cleaned_df.dtypes.astype(str).to_dict()
+
+        changed_types = []
+        for col in cleaned_df.columns:
+            before_t = dtypes_before.get(col)
+            after_t = dtypes_after.get(col)
+            if before_t != after_t:
+                changed_types.append(f"- {col}: {before_t} -> {after_t}")
+
+        # ===== UI 출력 =====
         st.success("✅ 전처리 완료!")
-        st.dataframe(cleaned.head())
+
+        st.markdown("#### 전처리 결과 요약")
+        col_a, col_b, col_c = st.columns(3)
+
+        with col_a:
+            st.metric(
+                label="행 개수",
+                value=f"{rows_after}",
+                delta=f"{rows_after - rows_before} (전 {rows_before})"
+            )
+
+        with col_b:
+            st.metric(
+                label="결측치 총 개수",
+                value=f"{nulls_after}",
+                delta=f"{nulls_after - nulls_before} (전 {nulls_before})"
+            )
+
+        with col_c:
+            st.metric(
+                label="컬럼 수",
+                value=f"{cleaned_df.shape[1]}",
+                delta=f"{cleaned_df.shape[1] - original_df.shape[1]} (전 {original_df.shape[1]})"
+            )
+
+        # dtype 변경 사항 표시
+        if changed_types:
+            st.markdown("#### 변경된 컬럼 타입")
+            st.code("\n".join(changed_types), language="text")
+
+        # 전/후 미리보기 나란히 보기
+        st.markdown("#### 전처리 전/후 샘플 비교 (상위 5행)")
+        preview_col1, preview_col2 = st.columns(2)
+
+        with preview_col1:
+            st.markdown("**전(before)**")
+            st.dataframe(original_df.head(), use_container_width=True)
+
+        with preview_col2:
+            st.markdown("**후(after)**")
+            st.dataframe(cleaned_df.head(), use_container_width=True)
