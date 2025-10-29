@@ -1,216 +1,109 @@
 import streamlit as st
+import tempfile, os, zipfile, json
 import pandas as pd
-import numpy as np
-import os
-import json
-from io import StringIO
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import AzureChatOpenAI
 
-# =========================
-# ✅ 환경 변수 로드
-# =========================
+# ===== 모듈 import =====
+from modules.loader import load_uploaded_files
+from modules.quality_checker import summarize_dataframe, find_relations
+from modules.ai_agent import init_azure_client, run_ai_report, run_qa
+from modules.cleaner import preprocess_dataframe
+from modules.db_uploader import upload_to_mysql
+
+# ===== 환경 설정 =====
 load_dotenv()
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+st.set_page_config(page_title="🧠 데이터 품질 점검 & 전처리 에이전트", page_icon="🤖", layout="wide")
 
-# =========================
-# ✅ Azure OpenAI 초기화
-# =========================
-llm = AzureChatOpenAI(
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
-    api_version="2024-02-01-preview",
-    deployment_name=DEPLOYMENT_NAME,
-    model="gpt-4.1-mini",
-    temperature=0.4
+# ===== 제목 =====
+st.markdown("""
+<h2 style='text-align:center; color:#4B9CD3;'>🧠 데이터 품질 점검 & 전처리 에이전트</h2>
+<p style='text-align:center; color:gray;'>데이터를 업로드하면, AI가 자동으로 품질 점검과 전처리 제안을 수행합니다.</p>
+""", unsafe_allow_html=True)
+
+# ===== 세션 초기화 =====
+if "preload_quality_report" not in st.session_state:
+    st.session_state["preload_quality_report"] = None
+if "qa_history" not in st.session_state:
+    st.session_state["qa_history"] = []
+if "cleaned_df" not in st.session_state:
+    st.session_state["cleaned_df"] = None
+
+# ===== Azure 클라이언트 초기화 =====
+client = init_azure_client()
+
+# ===== 1️⃣ 파일 업로드 =====
+uploaded_files = st.file_uploader(
+    "📦 CSV / XLSX / TXT / ZIP 업로드",
+    type=["csv", "xlsx", "txt", "zip"],
+    accept_multiple_files=True,
+    key="file_uploader_main"
 )
+dfs = {}
 
-# =========================
-# ✅ Streamlit 설정
-# =========================
-st.set_page_config(page_title="🧠 AI 데이터 전처리 Copilot", page_icon="🤖", layout="wide")
-st.title("🧠 AI 기반 데이터 분석 및 전처리 Copilot")
+if uploaded_files:
+    st.session_state["preload_quality_report"] = None
+    dfs = load_uploaded_files(uploaded_files)
+    st.success(f"✅ 총 {len(dfs)}개의 데이터셋 로드 완료")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📂 파일 업로드",
-    "📊 데이터 분석",
-    "💬 질의응답",
-    "🧩 전처리",
-    "🗃️ MySQL 적재"
-])
+# ===== 2️⃣ 품질 점검 리포트 + Q&A =====
+if dfs:
+    table_summaries = {name: summarize_dataframe(df, name) for name, df in dfs.items()}
+    relations = find_relations(dfs)
 
-# =========================
-# 📂 1️⃣ 파일 업로드 탭
-# =========================
-with tab1:
-    uploaded_files = st.file_uploader("📤 여러 파일을 업로드하세요", type=["csv", "xlsx", "json"], accept_multiple_files=True)
-    if uploaded_files:
-        st.session_state["dfs"] = {}
-        for file in uploaded_files:
-            try:
-                if file.name.endswith(".csv"):
-                    df = pd.read_csv(file)
-                elif file.name.endswith(".xlsx"):
-                    df = pd.read_excel(file)
-                elif file.name.endswith(".json"):
-                    df = pd.read_json(file)
-                else:
-                    st.warning(f"❌ {file.name}은(는) 지원되지 않는 형식입니다.")
-                    continue
-                st.session_state["dfs"][file.name] = df
-                st.success(f"✅ {file.name} 업로드 완료 ({df.shape[0]}행 × {df.shape[1]}열)")
-            except Exception as e:
-                st.error(f"{file.name} 로드 오류: {e}")
+    st.markdown("---")
+    st.subheader("🧠 데이터 품질 점검 보고서")
 
-# =========================
-# 📊 2️⃣ 데이터 분석 탭
-# =========================
-with tab2:
-    if "dfs" not in st.session_state or not st.session_state["dfs"]:
-        st.warning("⚠️ 먼저 파일을 업로드하세요.")
+    # 리포트 생성
+    if st.session_state["preload_quality_report"] is None:
+        with st.spinner("AI가 데이터 품질 점검 중입니다..."):
+            ai_report = run_ai_report(client, table_summaries, relations)
+            st.session_state["preload_quality_report"] = ai_report
+
+    # 리포트 출력
+    if st.session_state["preload_quality_report"]:
+        st.markdown(st.session_state["preload_quality_report"])
     else:
-        dfs = st.session_state["dfs"]
-        st.subheader("📋 업로드된 데이터 요약")
+        st.info("아직 품질 점검 리포트가 생성되지 않았습니다.")
 
-        summaries = {}
-        for name, df in dfs.items():
-            summary = {
-                "shape": df.shape,
-                "missing_values": int(df.isnull().sum().sum()),
-                "duplicated_rows": int(df.duplicated().sum()),
-                "columns": list(df.columns),
-                "types": df.dtypes.astype(str).to_dict()
-            }
-            summaries[name] = summary
-            with st.expander(f"📄 {name} 데이터 요약"):
-                st.json(summary)
-                st.dataframe(df.head(5))
+    # Q&A 구간
+    st.subheader("💬 리포트 기반 Q&A")
+    st.caption("리포트를 기반으로 궁금한 점을 바로 물어보세요 (예: 결측치가 가장 많은 컬럼은?).")
 
-        # =========================
-        # 🧠 AI 분석 보고서 생성
-        # =========================
-        if st.button("🧠 AI 데이터 분석 보고서 생성"):
-            prompt = PromptTemplate.from_template("""
-            다음은 사용자가 업로드한 여러 데이터셋의 요약 정보입니다.
-            각 데이터셋의 주요 특징, 결측치, 중복률, 데이터 크기, 공통 컬럼, 병합 가능성 등을 기반으로
-            데이터 분석 보고서를 작성해줘.
-            
-            데이터 요약:
-            {summaries}
-            """)
-            ai_report = llm.invoke(prompt.format(summaries=json.dumps(summaries, ensure_ascii=False)))
-            st.session_state["ai_report"] = ai_report.content
-            st.success("✅ AI 분석 보고서 생성 완료!")
-            st.markdown("### 📊 AI 데이터 분석 보고서")
-            st.write(ai_report.content)
+    for user_q, ai_a in st.session_state["qa_history"]:
+        with st.chat_message("user"):
+            st.markdown(f"**{user_q}**")
+        with st.chat_message("assistant"):
+            st.markdown(ai_a)
 
-# =========================
-# 💬 3️⃣ 대화형 질의응답 탭
-# =========================
-with tab3:
-    if "dfs" not in st.session_state:
-        st.warning("⚠️ 먼저 데이터를 업로드하세요.")
-    else:
-        st.subheader("💬 데이터 질의응답 (LLM + Pandas Agent)")
+    user_question = st.chat_input("🗨️ 리포트에 대해 질문하기...")
 
-        df_names = list(st.session_state["dfs"].keys())
-        selected_file = st.selectbox("질의할 데이터셋 선택", df_names)
-        df = st.session_state["dfs"][selected_file]
+    if user_question:
+        with st.chat_message("user"):
+            st.markdown(user_question)
+        with st.spinner("AI가 답변 중입니다..."):
+            ai_answer = run_qa(client, st.session_state["preload_quality_report"], user_question)
+        st.session_state["qa_history"].append((user_question, ai_answer))
+        with st.chat_message("assistant"):
+            st.markdown(ai_answer)
 
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
+    # ===== 4️⃣ 전처리 실행 =====
+    st.markdown("---")
+    st.subheader("⚙️ 전처리 실행")
 
-        query = st.chat_input("데이터에 대해 질문하세요 (예: 결측치가 가장 많은 컬럼은?)")
+    file_to_clean = st.selectbox("전처리할 파일 선택", list(dfs.keys()))
+    df = dfs[file_to_clean]
 
-        if query:
-            agent = create_pandas_dataframe_agent(llm, df, verbose=False)
-            response = agent.run(query)
-            st.session_state.chat_history.append((query, response))
+    fillna_opt = st.checkbox("결측치 0으로 채우기")
+    dropdup_opt = st.checkbox("중복행 제거")
+    encode_opt = st.checkbox("문자형 인코딩 (Label Encoding)")
 
-        for q, a in st.session_state.chat_history:
-            st.markdown(f"**🧑 질문:** {q}")
-            st.markdown(f"**🤖 답변:** {a}")
-
-# =========================
-# 🧩 4️⃣ 전처리 탭
-# =========================
-with tab4:
-    if "dfs" not in st.session_state:
-        st.warning("⚠️ 먼저 데이터를 업로드하세요.")
-    else:
-        df_names = list(st.session_state["dfs"].keys())
-        selected_file = st.selectbox("전처리할 데이터셋 선택", df_names)
-        df = st.session_state["dfs"][selected_file]
-
-        st.subheader("🧠 AI 전처리 제안")
-        if st.button("전처리 제안 받기"):
-            summary = {
-                "shape": df.shape,
-                "missing_values": int(df.isnull().sum().sum()),
-                "duplicated_rows": int(df.duplicated().sum()),
-                "columns": list(df.columns),
-                "types": df.dtypes.astype(str).to_dict()
-            }
-            prompt = PromptTemplate.from_template("""
-            아래 데이터 요약 정보를 바탕으로, 적절한 전처리 단계를 제안해줘.
-            (예: 결측치 처리, 이상치 제거, 형변환, 인코딩 등)
-            
-            데이터 요약:
-            {summary}
-            """)
-            suggestion = llm.invoke(prompt.format(summary=json.dumps(summary, ensure_ascii=False)))
-            st.session_state["ai_suggestion"] = suggestion.content
-            st.write(suggestion.content)
-
-        st.subheader("⚙️ 사용자 정의 전처리 실행")
-        actions = st.text_area("수행할 전처리 명령 (예: fillna=0, drop_duplicates, encode=label)")
-        if st.button("🚀 전처리 실행"):
-            df_clean = df.copy()
-            try:
-                if "fillna" in actions:
-                    df_clean = df_clean.fillna(0)
-                if "drop_duplicates" in actions:
-                    df_clean = df_clean.drop_duplicates()
-                if "encode" in actions:
-                    from sklearn.preprocessing import LabelEncoder
-                    enc = LabelEncoder()
-                    for col in df_clean.select_dtypes(include=["object"]).columns:
-                        df_clean[col] = enc.fit_transform(df_clean[col].astype(str))
-                st.session_state["cleaned_df"] = df_clean
-                st.success("✅ 전처리 완료!")
-                st.dataframe(df_clean.head())
-            except Exception as e:
-                st.error(f"전처리 중 오류 발생: {e}")
-
-# =========================
-# 🗃️ 5️⃣ MySQL 적재 탭
-# =========================
-with tab5:
-    if "cleaned_df" not in st.session_state:
-        st.warning("⚠️ 먼저 전처리를 완료하세요.")
-    else:
-        st.subheader("🗃️ MySQL 데이터베이스 적재")
-
-        host = st.text_input("MySQL 호스트", "localhost")
-        port = st.text_input("포트", "3306")
-        user = st.text_input("MySQL 사용자", "root")
-        password = st.text_input("MySQL 비밀번호", type="password")
-        database = st.text_input("DB 이름", "preprocessed_data")
-        table_name = st.text_input("테이블 이름", "cleaned_table")
-
-        if st.button("📥 MySQL 업로드"):
-            try:
-                engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}")
-                st.session_state["cleaned_df"].to_sql(
-                    name=table_name,
-                    con=engine,
-                    if_exists="replace",
-                    index=False
-                )
-                st.success(f"✅ `{database}` DB의 `{table_name}` 테이블에 업로드 완료!")
-            except Exception as e:
-                st.error(f"MySQL 업로드 실패: {e}")
+    if st.button("🚀 전처리 실행"):
+        opts = {
+            "fillna_zero": fillna_opt,
+            "drop_duplicates": dropdup_opt,
+            "encode_objects": encode_opt
+        }
+        cleaned = preprocess_dataframe(df, opts)
+        st.session_state["cleaned_df"] = cleaned
+        st.success("✅ 전처리 완료!")
+        st.dataframe(cleaned.head())

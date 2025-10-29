@@ -1,17 +1,8 @@
-# --- Core Web Framework ---
-streamlit==1.38.0
-
-# --- Azure SDKs ---
-azure-storage-blob==12.19.1
-azure-core==1.30.2
-
-# --- Environment Management ---
-python-dotenv==1.0.1
-
-# --- Utility Libraries ---
-requests==2.32.3
-
-# --- (Optional) For future AI/Analysis features ---
-openai==1.42.0          # Azure OpenAI API 호출용
-pandas==2.2.3           # CSV/Excel 데이터 분석용
-numpy==1.26.4           # 수치 데이터 처리
+streamlit
+pandas
+python-dotenv
+sqlalchemy
+pymysql
+openai
+scikit-learn
+azure-storage-blob
