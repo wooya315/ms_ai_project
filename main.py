@@ -10,7 +10,7 @@ from modules.loader import load_uploaded_files
 from modules.quality_checker import summarize_dataframe
 from modules.ai_agent import init_azure_client, run_ai_report, run_qa, run_data_processing
 from modules.cleaner import preprocess_dataframe
-from modules.azure_blob_uploader import test_azure_connection, upload_to_azure_blob
+from modules.blob_uploader import upload_to_azure_blob
 
 
 # ===== 환경 설정 =====
@@ -60,7 +60,7 @@ if uploaded_files:
     st.markdown("### 📊 업로드된 데이터 미리보기")
     for name, df in dfs.items():
         with st.expander(f"🔍 {name} 미리보기"):
-            st.dataframe(df.head(), use_container_width=True)
+            st.dataframe(df.head(), width="stretch")
 
 # ===== 2️⃣ 품질 점검 리포트 + Q&A =====
 if dfs:
@@ -113,7 +113,11 @@ st.caption("""
 - 전체 일괄 적용은 안전한 형식 정규화(strip/케이스/날짜/숫자) 위주로 권장됩니다.
 """)
 
-mode = st.radio("전처리 적용 범위", ["선택한 파일만 처리", "전체 업로드된 파일에 일괄 적용"])
+mode = st.radio(
+    "전처리 적용 범위",
+    ["전체 업로드된 파일에 일괄 적용", "선택한 파일만 처리"],
+    index=0 # ✅ 기본 선택을 두 번째 옵션으로 설정
+)
 
 if dfs:
     target_table_name = None
@@ -171,7 +175,6 @@ if dfs:
                 "changed_types": changed_types
             })
 
-        # ✅ 결과 세션에 저장
         st.session_state["cleaned_results"] = cleaned_results
         st.session_state["results_summary"] = results_summary
         st.success("✅ 전처리 완료! AI 기반 추가 전처리를 이어서 수행할 수 있습니다.")
@@ -182,8 +185,6 @@ if st.session_state.get("cleaned_results") and st.session_state.get("results_sum
 
     for s in st.session_state["results_summary"]:
         table_name = s["table"]
-
-        # ✅ 현재 dfs 또는 cleaned_results에 존재하지 않으면 스킵
         if table_name not in dfs or table_name not in st.session_state["cleaned_results"]:
             continue
 
@@ -191,13 +192,11 @@ if st.session_state.get("cleaned_results") and st.session_state.get("results_sum
         colL, colR = st.columns(2)
         with colL:
             st.markdown("**전(before)**")
-            st.dataframe(dfs[table_name].head(), use_container_width=True)
+            st.dataframe(dfs[table_name].head(), width="stretch")
         with colR:
             st.markdown("**후(after)**")
-            st.dataframe(st.session_state["cleaned_results"][table_name].head(), use_container_width=True)
+            st.dataframe(st.session_state["cleaned_results"][table_name].head(), width="stretch")
 
-
-    # ZIP 다운로드 (통합)
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, df in st.session_state["cleaned_results"].items():
@@ -216,7 +215,6 @@ if st.session_state.get("cleaned_results"):
     st.markdown("---")
     st.subheader("🤖 AI 명령 기반 후속 전처리")
 
-    # 기존 대화 로그 표시
     for user_q, ai_a in st.session_state["ai_history"]:
         with st.chat_message("user"):
             st.markdown(f"**{user_q}**")
@@ -249,41 +247,30 @@ if st.session_state.get("cleaned_results"):
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**전(before)**")
-                st.dataframe(df_before.head(), use_container_width=True)
+                st.dataframe(df_before.head(), width="stretch")
             with col2:
                 st.markdown("**후(after)**")
-                st.dataframe(processed_df.head(), use_container_width=True)
+                st.dataframe(processed_df.head(), width="stretch")
         else:
             with st.chat_message("assistant"):
                 st.warning(processed_df)
 
-# ===== ☁️ Azure Blob Storage 업로드 =====
+# ☁️ Azure Blob Storage 업로드
 st.markdown("### ☁️ Azure Blob Storage 업로드")
 
-# 1️⃣ 연결 테스트
-if st.button("🔗 Azure Blob 연결 테스트"):
-    connected = test_azure_connection()
-    st.session_state["azure_connected"] = connected
+if st.session_state.get("cleaned_results") and isinstance(st.session_state["cleaned_results"], dict):
+    st.info("✅ 전처리 완료 데이터가 있습니다. 업로드할 파일을 선택하세요.")
 
-# 2️⃣ 연결 성공 시에만 업로드 UI 표시
-if st.session_state.get("azure_connected"):
-    st.success("✅ Azure 연결이 확인되었습니다.")
+    available_files = list(st.session_state["cleaned_results"].keys())
+    selected_files = st.multiselect("📂 업로드할 파일 선택", available_files)
 
-    # cleaned_results가 None이 아닌 경우만 처리
-    if st.session_state.get("cleaned_results") and isinstance(st.session_state["cleaned_results"], dict):
-        container_name = st.text_input("업로드할 컨테이너 이름", value="cleaned-data")
-        available_files = list(st.session_state["cleaned_results"].keys())
-        selected_files = st.multiselect("📂 업로드할 파일 선택", available_files)
+    if st.button("🚀 선택한 파일 업로드"):
+        with st.spinner("Azure Blob Storage 업로드 중..."):
+            upload_to_azure_blob(
+                cleaned_results=st.session_state["cleaned_results"],
+                selected_files=selected_files,
+                container_name=os.getenv("AZURE_CONTAINER_NAME", "raw-data")
+            )
 
-        if st.button("🚀 선택한 파일 업로드"):
-            if not selected_files:
-                st.warning("⚠️ 업로드할 파일을 선택해주세요.")
-            else:
-                selected_data = {
-                    name: st.session_state["cleaned_results"][name]
-                    for name in selected_files
-                }
-                with st.spinner("Azure Blob Storage로 업로드 중..."):
-                    upload_to_azure_blob(selected_data, container_name)
-    else:
-        st.info("⚠️ 아직 전처리된 결과가 없습니다. 전처리 후 업로드를 진행해주세요.")
+else:
+    st.info("⚠️ 아직 전처리된 결과가 없습니다. 전처리 후 업로드를 진행해주세요.")
