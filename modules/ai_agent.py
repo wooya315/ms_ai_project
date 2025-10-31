@@ -97,21 +97,55 @@ def run_ai_report(client, summaries, relations=None):
 
 
 # ==============================
-# ✅ 리포트 기반 Q&A 수행
+# ✅ 리포트 + 데이터 기반 Q&A 수행
 # ==============================
-def run_qa(client, report, question):
+def run_qa(client, report, question, dataframes=None):
+    """
+    리포트(report)와 업로드된 데이터(dataframes)를 함께 참고하여 Q&A 수행.
+    """
     if not client:
         return "⚠️ Azure OpenAI 클라이언트가 초기화되지 않았습니다."
     if not report:
         return "⚠️ 품질 점검 리포트가 없습니다."
 
+    # ==============================
+    # 📊 데이터 요약 텍스트 생성
+    # ==============================
+    data_summary_text = ""
+    if dataframes and isinstance(dataframes, dict):
+        summaries = []
+        for name, df in dataframes.items():
+            summaries.append(f"📁 {name} (shape={df.shape[0]}행, {df.shape[1]}열)")
+            for col in df.columns[:5]:  # 컬럼이 많을 경우 일부만 요약
+                null_count = df[col].isna().sum()
+                dtype = str(df[col].dtype)
+                summaries.append(f"  - {col}: {dtype}, 결측치 {null_count}건")
+            summaries.append("")  # 파일 간 구분
+        data_summary_text = "\n".join(summaries)
+    else:
+        data_summary_text = "데이터 미리보기 정보가 없습니다."
+
+    # ==============================
+    # 🧠 프롬프트 구성
+    # ==============================
     messages = [
-        {"role": "system", "content":
-            "You are a helpful data quality analyst assistant. "
-            "Answer ONLY using the content of the provided report, and reply in Korean. "
-            "If the report lacks relevant information, state it briefly."
+        {
+            "role": "system",
+            "content": (
+                "You are a senior data engineer assistant. "
+                "Answer accurately and clearly in Korean, using both the report and the dataset summaries. "
+                "Use real values or statistics from the data if available. "
+                "If specific values cannot be found, reason based on the report context."
+            )
         },
-        {"role": "user", "content": f"리포트 내용:\n{report}\n\n질문: {question}"}
+        {
+            "role": "user",
+            "content": (
+                f"다음은 데이터 품질 점검 리포트입니다:\n{report}\n\n"
+                f"아래는 실제 업로드된 데이터의 요약 정보입니다:\n{data_summary_text}\n\n"
+                f"질문: {question}"
+            )
+        }
     ]
 
     try:
@@ -125,7 +159,7 @@ def run_qa(client, report, question):
     except Exception as e:
         st.error(f"❌ Q&A 처리 실패: {e}")
         return "⚠️ AI Q&A 처리 중 오류가 발생했습니다."
-    
+
 
 # ==============================
 # ✅ 데이터 가공 명령 수행

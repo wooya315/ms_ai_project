@@ -12,7 +12,6 @@ from modules.ai_agent import init_azure_client, run_ai_report, run_qa, run_data_
 from modules.cleaner import preprocess_dataframe
 from modules.blob_uploader import upload_to_azure_blob
 
-
 # ===== 환경 설정 =====
 load_dotenv()
 st.set_page_config(page_title="🧠 데이터 품질 점검 & 전처리 에이전트", page_icon="🤖", layout="wide")
@@ -99,10 +98,18 @@ if dfs:
             st.markdown(user_question)
         with st.spinner("AI가 답변 중입니다..."):
             ai_answer = run_qa(client, st.session_state["preload_quality_report"], user_question)
+
+        # ✅ 안전 처리 (cleaned_results가 None일 때 오류 방지)
+        cleaned_results = st.session_state.get("cleaned_results", {})
+        if isinstance(cleaned_results, dict):
+            available_files = list(cleaned_results.keys())
+        else:
+            available_files = []
+
         st.session_state["qa_history"].append((user_question, ai_answer))
+
         with st.chat_message("assistant"):
-            available_files = list(st.session_state["cleaned_results"].keys())
-        st.markdown(ai_answer)
+            st.markdown(ai_answer)
 
 # ===== 3️⃣ 전처리 실행 =====
 st.markdown("---")
@@ -116,7 +123,7 @@ st.caption("""
 mode = st.radio(
     "전처리 적용 범위",
     ["전체 업로드된 파일에 일괄 적용", "선택한 파일만 처리"],
-    index=0 # ✅ 기본 선택을 두 번째 옵션으로 설정
+    index=0
 )
 
 if dfs:
@@ -179,7 +186,7 @@ if dfs:
         st.session_state["results_summary"] = results_summary
         st.success("✅ 전처리 완료! AI 기반 추가 전처리를 이어서 수행할 수 있습니다.")
 
-# ===== 전처리 결과 유지 표시 =====
+# ===== 전처리 결과 표시 =====
 if st.session_state.get("cleaned_results") and st.session_state.get("results_summary"):
     st.markdown("### 📊 전처리 결과 미리보기")
 
@@ -271,6 +278,5 @@ if st.session_state.get("cleaned_results") and isinstance(st.session_state["clea
                 selected_files=selected_files,
                 container_name=os.getenv("AZURE_CONTAINER_NAME", "raw-data")
             )
-
 else:
     st.info("⚠️ 아직 전처리된 결과가 없습니다. 전처리 후 업로드를 진행해주세요.")
