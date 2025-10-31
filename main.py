@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # ===== 모듈 import =====
 from modules.loader import load_uploaded_files
 from modules.quality_checker import summarize_dataframe
-from modules.ai_agent import init_azure_client, run_ai_report, run_qa, run_data_processing
+from modules.ai_agent import init_azure_client, run_ai_report, run_data_processing
 from modules.cleaner import preprocess_dataframe
 from modules.blob_uploader import upload_to_azure_blob
 
@@ -78,38 +78,6 @@ if dfs:
         st.markdown(st.session_state["preload_quality_report"])
     else:
         st.info("아직 리포트를 생성하지 않았습니다.")
-
-    # ===== Q&A =====
-    st.markdown("---")
-    st.subheader("💬 리포트 기반 Q&A")
-
-    for user_q, ai_a in st.session_state["qa_history"]:
-        with st.chat_message("user"):
-            st.markdown(f"**{user_q}**")
-        with st.chat_message("assistant"):
-            st.markdown(ai_a)
-
-    with st.form(key="qa_form", clear_on_submit=True):
-        user_question = st.text_area("리포트에 대해 질문하기", placeholder="리포트 내용에 대해 궁금한 점을 입력하세요...")
-        submitted = st.form_submit_button("질문하기")
-
-    if submitted and user_question:
-        with st.chat_message("user"):
-            st.markdown(user_question)
-        with st.spinner("AI가 답변 중입니다..."):
-            ai_answer = run_qa(client, st.session_state["preload_quality_report"], user_question)
-
-        # ✅ 안전 처리 (cleaned_results가 None일 때 오류 방지)
-        cleaned_results = st.session_state.get("cleaned_results", {})
-        if isinstance(cleaned_results, dict):
-            available_files = list(cleaned_results.keys())
-        else:
-            available_files = []
-
-        st.session_state["qa_history"].append((user_question, ai_answer))
-
-        with st.chat_message("assistant"):
-            st.markdown(ai_answer)
 
 # ===== 3️⃣ 전처리 실행 =====
 st.markdown("---")
