@@ -1,9 +1,12 @@
-# 🧠 데이터 품질 점검 & 전처리 에이전트  
+<img width="1482" height="640" alt="스크린샷 2025-10-31 104645" src="https://github.com/user-attachments/assets/c251ec54-d4a1-4e90-bf11-8f2664aaa79c" /><img width="1482" height="640" alt="스크린샷 2025-10-31 104645" src="https://github.com/user-attachments/assets/a0f2b146-6a47-4016-8cf0-ee27244ffab4" /># 🧠 데이터 품질 점검 & 전처리 에이전트  
 *(Data Quality Check & Preprocessing Agent)*  
 
 DB 적재 전에 “이 데이터, 믿어도 될까?”를 대신 점검해주는 **AI 기반 데이터 품질 관리 도구**입니다.  
 Streamlit 기반 UI를 통해 **업로드 → 품질 점검 → 전처리 → AI 기반 수정 → Blob 업로드**까지  
 한 화면에서 자동 처리할 수 있습니다.  
+
+🌐 **웹 서비스 실행**  
+[데이터 품질 점검 & 전처리 에이전트 웹 앱 바로가기](https://data-preprocessing-agent.azurewebsites.net/)
 
 ---
 
@@ -136,7 +139,7 @@ Streamlit 기반 UI를 통해 **업로드 → 품질 점검 → 전처리 → AI
 📸 **업로드 결과 예시 (Azure Storage Explorer)**  
 아래는 전처리 완료된 파일들이 Azure Blob Storage의 `raw-data` 컨테이너에 업로드된 화면입니다.  
 
-![Azure Blob Storage 업로드 결과](스크린샷%202025-10-31%20104645.png)
+<img width="1482" height="640" alt="Azure Blob Storage 업로드 결과" src="https://github.com/user-attachments/assets/aebd4a00-a2b9-4439-8bb3-83c0333d0923" />
 
 ---
 
