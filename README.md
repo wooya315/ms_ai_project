@@ -30,14 +30,14 @@
 
 ```mermaid
 graph TD
-    A[사용자 업로드 (CSV/XLSX/JSON/XML/ZIP)] --> B[파일 로더 (loader.py)]
-    B --> C[품질 요약 분석 (quality_checker.py)]
-    C --> D[AI 품질 리포트 (ai_agent.py)]
-    D --> E[Streamlit Q&A 인터페이스]
-    E --> F[전처리 실행 (cleaner.py)]
-    F --> G[AI 명령 기반 후속 전처리]
-    G --> H[Azure Blob 업로드 (blob_uploader.py)]
-```
+A[📂 데이터 업로드<br/>CSV, Excel, JSON, XML, ZIP 파일] --> B[🧮 데이터 분석<br/>결측치 · 중복 · 타입 점검]
+B --> C[🤖 AI 품질 리포트<br/>Azure OpenAI 기반 자동 생성]
+C --> D[💬 Q&A 인터페이스<br/>리포트 기반 대화형 질의응답]
+D --> E[🧹 전처리 실행<br/>옵션 선택 또는 일괄 정제]
+E --> F[🧠 AI 명령 전처리<br/>자연어 명령 예: 날짜 포맷 변경]
+F --> G[☁️ 클라우드 업로드<br/>Azure Blob Storage 저장]
+
+
 
 ---
 
