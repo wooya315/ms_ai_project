@@ -115,7 +115,7 @@ Streamlit 기반 UI를 통해 **업로드 → 품질 점검 → 전처리 → AI
 
 | 옵션 | 설명 |
 |------|------|
-| `fillna_zero` | 결측치를 0으로 대체 |
+| `fillna_zero` | 결측치를 0 혹은 문자열로 대체 |
 | `drop_duplicates` | 중복 행 제거 |
 | `strip_strings` | 문자열 앞뒤 공백 제거 |
 | `normalize_case` | 문자열 대/소문자 통일 |
