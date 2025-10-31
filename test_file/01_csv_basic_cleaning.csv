@@ -1,0 +1,6 @@
+id , Name , Gender , BirthDate , Salary
+1 , Alice , F , 2021-01-01 , "1000"
+2 , bob , M , 2021/02/01 , "2000"
+3 , CHARLIE , Male , 2021.03.01 , "3000"
+4 , alice , f , 2021-01-01 , "1000"
+5 ,   , Female , , 

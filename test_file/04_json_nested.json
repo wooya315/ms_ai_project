@@ -1,0 +1,24 @@
+[
+  {
+    "user": {
+      "id": 1,
+      "name": "Alice"
+    },
+    "score": 95,
+    "meta": {
+      "country": "KR",
+      "active": true
+    }
+  },
+  {
+    "user": {
+      "id": 2,
+      "name": "Bob"
+    },
+    "score": 87,
+    "meta": {
+      "country": "US",
+      "active": false
+    }
+  }
+]

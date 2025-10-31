@@ -1,0 +1,4 @@
+id	name	age	city
+1;Alice;30;Seoul
+2;Bob;25;Busan
+3;Charlie;35;Incheon
