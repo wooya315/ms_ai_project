@@ -96,42 +96,6 @@ def run_ai_report(client, summaries, relations=None):
         return "⚠️ AI 품질 보고서 생성 중 오류가 발생했습니다."
 
 
-    # ==============================
-    # 🧠 프롬프트 구성
-    # ==============================
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a senior data engineer assistant. "
-                "Answer accurately and clearly in Korean, using both the report and the dataset summaries. "
-                "Use real values or statistics from the data if available. "
-                "If specific values cannot be found, reason based on the report context."
-            )
-        },
-        {
-            "role": "user",
-            "content": (
-                f"다음은 데이터 품질 점검 리포트입니다:\n{report}\n\n"
-                f"아래는 실제 업로드된 데이터의 요약 정보입니다:\n{data_summary_text}\n\n"
-                f"질문: {question}"
-            )
-        }
-    ]
-
-    try:
-        resp = client.chat.completions.create(
-            model=os.getenv("DEPLOYMENT_NAME"),
-            messages=messages,
-            temperature=0.4,
-            max_completion_tokens=800
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"❌ Q&A 처리 실패: {e}")
-        return "⚠️ AI Q&A 처리 중 오류가 발생했습니다."
-
-
 # ==============================
 # ✅ 데이터 가공 명령 수행
 # ==============================
