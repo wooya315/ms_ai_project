@@ -2,7 +2,6 @@
 import os
 import json
 import streamlit as st
-import pandas as pd
 from openai import AzureOpenAI
 
 # ==============================
