@@ -4,10 +4,49 @@ import xml.etree.ElementTree as ET
 import zipfile
 import io
 
+# ==========================================================
+# 🧩 1️⃣ 개별 파일 파서 (공통 함수)
+# ==========================================================
+def parse_file_to_df(file_obj, filename: str) -> pd.DataFrame | None:
+    """파일 객체와 이름을 받아 확장자에 따라 DataFrame으로 변환"""
+    try:
+        if filename.endswith(".csv"):
+            return pd.read_csv(file_obj)
+
+        elif filename.endswith(".xlsx"):
+            return pd.read_excel(file_obj)
+
+        elif filename.endswith(".json"):
+            return pd.json_normalize(json.load(file_obj))
+
+        elif filename.endswith(".xml"):
+            tree = ET.parse(file_obj)
+            root = tree.getroot()
+            data = [{child.tag: child.text for child in elem} for elem in root]
+            return pd.DataFrame(data)
+
+        elif filename.endswith(".txt"):
+            content = file_obj.read().decode("utf-8", errors="ignore")
+            # 자동 구분자 탐색
+            delim = "," if "," in content else "\t" if "\t" in content else ";"
+            return pd.read_csv(io.StringIO(content), delimiter=delim)
+
+        else:
+            print(f"⚠️ 지원되지 않는 파일 형식: {filename}")
+            return None
+
+    except Exception as e:
+        print(f"❌ {filename} 처리 중 오류: {e}")
+        return None
+
+
+# ==========================================================
+# 📦 2️⃣ 업로드 파일 로더 (ZIP 포함)
+# ==========================================================
 def load_uploaded_files(uploaded_files):
     """
     Streamlit uploader에서 넘어온 파일 리스트를 읽어 DataFrame dict로 반환.
-    - zip 파일일 경우 내부 파일을 자동으로 해제하여 함께 반환
+    - zip 파일일 경우 내부 파일을 자동 해제하여 함께 반환
     """
     dfs = {}
 
@@ -18,54 +57,18 @@ def load_uploaded_files(uploaded_files):
         if filename.endswith(".zip"):
             with zipfile.ZipFile(file, "r") as z:
                 for inner_name in z.namelist():
-                    # 하위 폴더 제외
                     if inner_name.endswith("/"):
-                        continue
+                        continue  # 폴더는 스킵
 
                     with z.open(inner_name) as inner_file:
-                        try:
-                            if inner_name.endswith(".csv"):
-                                df = pd.read_csv(inner_file)
-                            elif inner_name.endswith(".xlsx"):
-                                df = pd.read_excel(inner_file)
-                            elif inner_name.endswith(".json"):
-                                df = pd.json_normalize(json.load(inner_file))
-                            elif inner_name.endswith(".xml"):
-                                tree = ET.parse(inner_file)
-                                root = tree.getroot()
-                                dfs_in_xml = []
-                                for child in root:
-                                    dfs_in_xml.append({elem.tag: elem.text for elem in child})
-                                df = pd.DataFrame(dfs_in_xml)
-                            elif inner_name.endswith(".txt"):
-                                content = inner_file.read().decode("utf-8", errors="ignore")
-                                # 자동 구분자 탐색 (쉼표/탭/세미콜론)
-                                delim = "," if "," in content else "\t" if "\t" in content else ";"
-                                df = pd.read_csv(io.StringIO(content), delimiter=delim)
-                            else:
-                                continue
-
+                        df = parse_file_to_df(inner_file, inner_name.lower())
+                        if df is not None:
                             dfs[inner_name] = df
-                        except Exception as e:
-                            print(f"❌ {inner_name} 처리 중 오류: {e}")
 
-        # ---- 일반 CSV / XLSX / JSON / XML / TXT ----
-        elif filename.endswith(".csv"):
-            dfs[file.name] = pd.read_csv(file)
-        elif filename.endswith(".xlsx"):
-            dfs[file.name] = pd.read_excel(file)
-        elif filename.endswith(".json"):
-            dfs[file.name] = pd.json_normalize(json.load(file))
-        elif filename.endswith(".xml"):
-            tree = ET.parse(file)
-            root = tree.getroot()
-            data = [{child.tag: child.text for child in elem} for elem in root]
-            dfs[file.name] = pd.DataFrame(data)
-        elif filename.endswith(".txt"):
-            content = file.read().decode("utf-8", errors="ignore")
-            delim = "," if "," in content else "\t" if "\t" in content else ";"
-            dfs[file.name] = pd.read_csv(io.StringIO(content), delimiter=delim)
+        # ---- 단일 파일 처리 ----
         else:
-            print(f"⚠️ 지원되지 않는 파일 형식: {file.name}")
+            df = parse_file_to_df(file, filename)
+            if df is not None:
+                dfs[file.name] = df
 
     return dfs
