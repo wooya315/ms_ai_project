@@ -6,7 +6,7 @@ from dateutil import parser
 from datetime import datetime
 
 # ==========================================================
-# 🧹 1️⃣ 비어 있는 컬럼 자동 삭제
+# 🧹 0️⃣ 비어 있는 컬럼 자동 삭제
 # ==========================================================
 def drop_empty_cols(df: pd.DataFrame) -> pd.DataFrame:
     drop_cols = []
@@ -20,7 +20,7 @@ def drop_empty_cols(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==========================================================
-# 🧠 2️⃣ Robust 날짜 파서
+# 🧠 Robust 날짜 파서 (내부 유틸)
 # ==========================================================
 def robust_parse_date(x):
     """datetime + dateutil.parser 병합 파서"""
@@ -38,9 +38,6 @@ def robust_parse_date(x):
         return pd.NaT
 
 
-# ==========================================================
-# 🔍 3️⃣ 날짜 추정 함수
-# ==========================================================
 def looks_like_date(val: str) -> bool:
     """값이 날짜 형태로 보이는지 간단히 추정"""
     if not isinstance(val, str):
@@ -54,21 +51,21 @@ def looks_like_date(val: str) -> bool:
 
 
 # ==========================================================
-# ⚙️ 4️⃣ 메인 전처리 함수
+# ⚙️ 메인 전처리 함수
 # ==========================================================
 def preprocess_dataframe(df: pd.DataFrame, options: dict):
     df = df.copy()
     logs = []
 
-    # 0️⃣ 빈 문자열을 NaN으로 통일
+    # 1️⃣ 빈 문자열을 NaN으로 통일
     df = df.replace(r'^\s*$', np.nan, regex=True)
 
-    # 1️⃣ 문자열 공백 및 유니코드 정규화
+    # 2️⃣ 문자열 공백 및 유니코드 정규화
     if options.get("strip_strings", True):
         df = df.applymap(lambda x: unicodedata.normalize("NFKC", x.strip()) if isinstance(x, str) else x)
         logs.append("✅ 문자열 앞뒤 공백 및 유니코드 정규화")
 
-    # 2️⃣ 대소문자 변환
+    # 3️⃣ 대소문자 변환
     normalize_case = options.get("normalize_case")
     if normalize_case:
         if normalize_case == "lower":
@@ -77,7 +74,7 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
             df = df.applymap(lambda x: x.upper() if isinstance(x, str) else x)
         logs.append("✅ 문자열 대소문자 변환 수행")
 
-    # 3️⃣ 숫자형 문자열 변환 ("1,000", "$3000")
+    # 4️⃣ 숫자형 문자열 변환 ("1,000", "$3000")
     if options.get("convert_numeric_strings", True):
         for col in df.columns:
             if df[col].dtype == object:
@@ -91,6 +88,7 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
                     df[col] = numeric
         logs.append("✅ 숫자형 문자열 변환 수행")
 
+    # 5️⃣ 날짜형 변환 (robust 처리 포함)
     if options.get("convert_dates", True):
         date_keywords = ["date", "day", "time", "dob", "birth", "dt"]
         for col in df.columns:
@@ -107,7 +105,7 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
             if not (has_date_name or has_date_pattern):
                 continue
 
-            # ② 문자열 전처리 먼저 수행
+            # ② 문자열 정리
             temp = (
                 df[col].astype(str)
                 .str.strip()
@@ -118,12 +116,11 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
             # ③ 1차 pandas 변환
             parsed = pd.to_datetime(temp, errors="coerce", infer_datetime_format=True)
 
-            # ④ 2차 robust parser 적용 (NaT인 항목만)
+            # ④ 2차 robust parser 적용
             mask_failed = parsed.isna()
             if mask_failed.any():
                 parsed.loc[mask_failed] = temp[mask_failed].apply(robust_parse_date)
 
-            # ⑤ 변환 결과 반영
             df[col] = parsed
 
         # ✅ 날짜 포맷 통일
@@ -131,21 +128,7 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
             if pd.api.types.is_datetime64_any_dtype(df[col]):
                 df[col] = df[col].dt.strftime("%Y-%m-%d")
 
-        logs.append("✅ 날짜형 변환 완료 (원본 문자열 유지 후 robust 처리)")
-
-    # 5️⃣ Gender 표준화
-    if "Gender" in df.columns:
-        df["Gender"] = (
-            df["Gender"]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .replace({
-                "female": "F", "f": "F",
-                "male": "M", "m": "M"
-            })
-        )
-        logs.append("✅ Gender 컬럼 표준화 (F/M)")
+        logs.append("✅ 날짜형 변환 완료 (robust 처리 포함)")
 
     # 6️⃣ 결측치 채우기
     if options.get("fillna_zero", True):
@@ -164,7 +147,7 @@ def preprocess_dataframe(df: pd.DataFrame, options: dict):
         df.drop_duplicates(inplace=True)
         logs.append(f"⚙️ 중복 행 {before - len(df)}개 제거")
 
-    # 8️⃣ 완전 공백 컬럼 제거
+    # 8️⃣ 비어 있는 컬럼 자동 삭제
     if options.get("drop_empty_cols", True):
         df = drop_empty_cols(df)
 
